@@ -1,0 +1,6 @@
+{
+  "name": "RAG Support Platform",
+  "description": "Enterprise-grade dashboard for the RAG Support Service Platform, supporting instant RAG, automated customer chatbots, Git-synchronized developer docs, and custom Telebirr payment simulations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
