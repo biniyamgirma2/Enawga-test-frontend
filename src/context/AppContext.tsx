@@ -15,6 +15,9 @@ interface AppContextType {
   chatHistory: Record<string, ChatMessage[]>; // keyed by namespace_id or session_id
   usageStats: UsageStats;
   billingTransactions: BillingTransaction[];
+  users: User[];
+  deleteUser: (userId: string) => void;
+  updateUserPlan: (userId: string, plan: PlanType) => void;
   
   // Auth Functions
   register: (name: string, email: string, psw: string) => Promise<{ status: 'verify_needed'; userId: string; email: string }>;
@@ -281,6 +284,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem('rag_user');
     return saved ? JSON.parse(saved) : DEFAULT_USER; // Default seed user first
   });
+
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem('rag_all_users');
+    if (saved) return JSON.parse(saved);
+    return [
+      DEFAULT_USER,
+      {
+        id: 'usr_abel',
+        email: 'abel@enawga.com',
+        name: 'Abel Kebede',
+        plan: 'pro',
+        telebirr_phone: '0911223344',
+        is_verified: true,
+        avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+        created_at: new Date('2026-05-18T10:00:00Z').toISOString(),
+      },
+      {
+        id: 'usr_tigist',
+        email: 'tigist@cyberethiopia.com',
+        name: 'Tigist Shiferaw',
+        plan: 'enterprise',
+        telebirr_phone: '0922889900',
+        is_verified: true,
+        avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+        created_at: new Date('2026-04-12T09:15:00Z').toISOString(),
+      }
+    ];
+  });
   
   const [projects, setProjects] = useState<Project[]>(() => {
     const saved = localStorage.getItem('rag_projects');
@@ -329,6 +360,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('rag_user', JSON.stringify(currentUser));
   }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('rag_all_users', JSON.stringify(users));
+  }, [users]);
 
   useEffect(() => {
     localStorage.setItem('rag_projects', JSON.stringify(projects));
@@ -447,6 +482,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       created_at: new Date().toISOString()
     };
 
+    setUsers(prev => [...prev, newUser]);
     setCurrentUser(newUser);
     setPendingRegisterUser(null);
     return newUser;
@@ -462,6 +498,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw new Error('Missing input credentials.');
     }
 
+    const lowerEmail = email.toLowerCase();
+    if (lowerEmail === 'admin@enawga.com') {
+      if (psw !== 'admin123') {
+        throw new Error('Authentication failure: Incorrect password for administrator (401 Unauthorized).');
+      }
+      const adminUser: User = {
+        id: 'usr_admin',
+        email: 'admin@enawga.com',
+        name: 'System Administrator',
+        plan: 'enterprise',
+        telebirr_phone: '0901234567',
+        is_verified: true,
+        avatar_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+        created_at: new Date('2026-01-01T00:00:00Z').toISOString()
+      };
+      
+      setUsers(prev => {
+        if (!prev.find(u => u.email.toLowerCase() === 'admin@enawga.com')) {
+          return [...prev, adminUser];
+        }
+        return prev;
+      });
+
+      setCurrentUser(adminUser);
+      return adminUser;
+    }
+
     // Support automatic testing login
     if (email.includes('@') && psw.length >= 6) {
       const user: User = {
@@ -474,6 +537,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         avatar_url: email === DEFAULT_USER.email ? currentUser?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150' : null,
         created_at: new Date().toISOString()
       };
+
+      setUsers(prev => {
+        if (!prev.find(u => u.id === user.id || u.email.toLowerCase() === email.toLowerCase())) {
+          return [...prev, user];
+        }
+        return prev;
+      });
+
       setCurrentUser(user);
       return user;
     }
@@ -507,6 +578,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
       created_at: new Date().toISOString()
     };
+    setUsers(prev => {
+      if (!prev.find(u => u.email === googleUser.email)) {
+        return [...prev, googleUser];
+      }
+      return prev;
+    });
     setCurrentUser(googleUser);
     return googleUser;
   };
@@ -854,6 +931,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUser(prev => prev ? { ...prev, plan: 'free' } : null);
   };
 
+  const deleteUser = (userId: string) => {
+    setUsers(prev => prev.filter(u => u.id !== userId));
+    // Purge their entities
+    setProjects(prev => prev.filter(p => p.user_id !== userId));
+    if (currentUser && currentUser.id === userId) {
+      setCurrentUser(null);
+    }
+  };
+
+  const updateUserPlan = (userId: string, plan: PlanType) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, plan } : u));
+    if (currentUser && currentUser.id === userId) {
+      setCurrentUser(prev => prev ? { ...prev, plan } : null);
+    }
+  };
+
   // ================= Direct RAG Simulation ===================
 
   const sendRAGMessage = async (namespaceId: string, userMessage: string, customApiKey?: string) => {
@@ -936,6 +1029,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resetAllData = () => {
     setCurrentUser(DEFAULT_USER);
+    setUsers([
+      DEFAULT_USER,
+      {
+        id: 'usr_abel',
+        email: 'abel@enawga.com',
+        name: 'Abel Kebede',
+        plan: 'pro',
+        telebirr_phone: '0911223344',
+        is_verified: true,
+        avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+        created_at: new Date('2026-05-18T10:00:00Z').toISOString(),
+      },
+      {
+        id: 'usr_tigist',
+        email: 'tigist@cyberethiopia.com',
+        name: 'Tigist Shiferaw',
+        plan: 'enterprise',
+        telebirr_phone: '0922889900',
+        is_verified: true,
+        avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+        created_at: new Date('2026-04-12T09:15:00Z').toISOString(),
+      }
+    ]);
     setProjects(SEED_PROJECTS);
     setDocuments(SEED_DOCUMENTS);
     setApiKeys(SEED_KEYS);
@@ -946,6 +1062,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBillingTransactions(SEED_TRANSACTIONS);
     
     localStorage.removeItem('rag_user');
+    localStorage.removeItem('rag_all_users');
     localStorage.removeItem('rag_projects');
     localStorage.removeItem('rag_documents');
     localStorage.removeItem('rag_keys');
@@ -959,7 +1076,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       currentUser, projects, documents, apiKeys, hostedBots, githubRepos, commitEvents,
-      chatHistory, usageStats, billingTransactions,
+      chatHistory, usageStats, billingTransactions, users, deleteUser, updateUserPlan,
       register, verifyEmail, resendOTP, login, logout, updateProfile, simulateOAuth,
       createProject, deleteProject, uploadDocument, simulateDocumentPipeline,
       createHostedBot, updateHostedBot,
